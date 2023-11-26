@@ -48,16 +48,17 @@ class TurtleExploration(Node):
         self.index_of_angle = 0 #used for debug
         self.increment_of_scanner = 2*math.pi/self.num_ranges
         self.colliding = False
-        self.collision_buffer = 0.8 #meters
+        self.collision_buffer = 0.5
         #bug algorithm
         self.wall_to_hug = 'NaN'
         self.dist_from_hugging_wall = 0
-        self.desired_dist_from_wall = 0.6
+        self.desired_dist_from_wall = 0.7
         #angle on wall: -1 negative, 0 zero, 1 positive
         self.desired_angle_on_wall = 0
         self.angle_on_wall = 0
         self.diff = 0 #for debug
-        self.search_speed = 0.5
+        self.search_speed = 0.3
+        self.search_rotation_speed = 0.2
         self.wall_lost = False
         
         #TF
@@ -83,7 +84,6 @@ class TurtleExploration(Node):
         self.range_of_longest_dist = longest_range 
         self.angle_of_longest_dist = longest_angle
     
-
     def set_shortest_and_longest_range_in_front_of_robot(self): #Should be split up in more functions
         all_ranges = self.scan.ranges
         quarter_of_ranges = self.num_ranges//4
@@ -94,7 +94,7 @@ class TurtleExploration(Node):
 
         for i, range in enumerate(interesting_ranges_left):
             angle = self.increment_of_scanner*i
-            thresh = self.width_of_robot/(2*math.cos(math.pi/2-angle))
+            thresh = (self.width_of_robot-0.02)/(2*math.cos(math.pi/2-angle+0.4))
             if range < thresh:
                 if range < shortest_range_in_front_of_robot:
                     shortest_range_in_front_of_robot = range
@@ -103,7 +103,7 @@ class TurtleExploration(Node):
 
         for i, range in enumerate(interesting_ranges_right):
             angle = self.increment_of_scanner*i
-            thresh = self.width_of_robot/(2*math.cos(angle))
+            thresh = self.width_of_robot/(2*math.cos(angle)+0.4)
             if range < thresh:
                 if range < shortest_range_in_front_of_robot:
                     shortest_range_in_front_of_robot = range
@@ -151,7 +151,9 @@ class TurtleExploration(Node):
     def decide_angle_on_wall(self):
         buffer = 0.1
         self.desired_angle_on_wall = 0
-        if self.wall_to_hug == 'left':
+        if self.dist_from_hugging_wall == float('inf'):
+            self.desired_angle_on_wall = 0
+        elif self.wall_to_hug == 'left':
             if self.dist_from_hugging_wall < self.desired_dist_from_wall-buffer:
                 self.desired_angle_on_wall = -1
             elif self.dist_from_hugging_wall > self.desired_dist_from_wall+buffer:
@@ -161,34 +163,36 @@ class TurtleExploration(Node):
                 self.desired_angle_on_wall = 1
             elif self.dist_from_hugging_wall > self.desired_dist_from_wall+buffer:
                 self.desired_angle_on_wall = -1
+        
           
     def check_for_lost_wall(self):
-        offset_from_middle_of_robot = 5
+        offset_from_middle_of_robot = 20
         ranges = []
-        wall_lost = False
+        is_wall_lost = False
+        buff = 0.2
         #define 3 angles to check
         if self.wall_to_hug == 'left':
-            ranges = [self.scan.ranges[self.num_ranges//4]]
-                    #   self.scan.ranges[self.num_ranges//4-offset_from_middle_of_robot], 
-                    #   self.scan.ranges[self.num_ranges//4+offset_from_middle_of_robot]]
+            ranges = [self.scan.ranges[self.num_ranges//4-offset_from_middle_of_robot]]
+                   # [self.scan.ranges[self.num_ranges//4-offset_from_middle_of_robot],
+                      #self.scan.ranges[self.num_ranges//4+offset_from_middle_of_robot]]
         elif self.wall_to_hug == 'right':
-            ranges = [self.scan.ranges[3*self.num_ranges//4]] 
-                    #   self.scan.ranges[3*self.num_ranges//4-offset_from_middle_of_robot], 
-                    #   self.scan.ranges[3*self.num_ranges//4+offset_from_middle_of_robot]]
+            ranges = [self.scan.ranges[3*self.num_ranges//4+offset_from_middle_of_robot]]
+                    #[self.scan.ranges[3*self.num_ranges//4+offset_from_middle_of_robot],
+                    #self.scan.ranges[3*self.num_ranges//4-offset_from_middle_of_robot]]
             
         for elem in ranges:
-            if elem > self.desired_dist_from_wall + 0.5:
-                wall_lost = True
-
-        if wall_lost == True:
+            if elem > self.desired_dist_from_wall + buff:
+                is_wall_lost = True
+            
+        
+        if is_wall_lost == True:
             self.wall_lost = True
         else:
             self.wall_lost = False
     
-
     def set_angle_on_wall(self):
-        offset_from_middle_of_robot = 25
-        thresh_for_angle = 0.1
+        offset_from_middle_of_robot = 10
+        thresh_for_angle = 0.03
         if self.wall_to_hug == 'left':
             angle1 = self.scan.ranges[self.num_ranges//4-offset_from_middle_of_robot]
             angle2 = self.scan.ranges[self.num_ranges//4+offset_from_middle_of_robot]
@@ -212,36 +216,54 @@ class TurtleExploration(Node):
                 self.angle_on_wall = 0
     
     
-
-
     def bug_algorithm_fsm(self):
         if self.state == State.INIT:
             self.find_closest_wall()
             self.state = State.DRIVING
-            self.set_speed(self.search_speed)
         #if self.state == State.IDLE:
         if self.state == State.DRIVING:
-
+            self.collision_buffer = 0.8
+            self.set_speed(self.search_speed)
             self.set_dist_from_hugging_wall()
             self.decide_angle_on_wall()
             self.set_angle_on_wall()
             self.check_for_lost_wall()
+            self.set_shortest_and_longest_range_in_front_of_robot()
+            self.check_for_collision()
+            if self.colliding == True:
+                self.state = State.OBSTRUCTED
+            if self.wall_lost == True:
+                self.state = State.CORNER
+        
             if self.desired_angle_on_wall == self.angle_on_wall:
                 self.set_rotation(0.0)
             elif self.desired_angle_on_wall > self.angle_on_wall:
                 self.set_rotation(self.search_speed)
             elif self.desired_angle_on_wall < self.angle_on_wall:
                 self.set_rotation(-self.search_speed)
-            if self.wall_lost == True:
-                self.state = State.CORNER
         if self.state == State.CORNER:
             self.check_for_lost_wall()
+            self.set_shortest_and_longest_range_in_front_of_robot()
+            self.check_for_collision()
+            self.collision_buffer = 0.5
             if self.wall_to_hug == 'left':
-                self.set_speed(self.search_speed)
-                self.set_rotation(self.search_speed/self.desired_dist_from_wall) #Follow curvature of corner
+                self.set_rotation(self.search_speed*1.4/(self.desired_dist_from_wall)) #Follow curvature of corner
             elif self.wall_to_hug == 'right':
-                self.set_rotation(-self.search_speed/self.desired_dist_from_wall)
+                self.set_rotation(-self.search_speed*1.4/(self.desired_dist_from_wall))
             if self.wall_lost == False:
+                self.state = State.DRIVING
+            if self.colliding == True:
+                self.state = State.OBSTRUCTED
+        if self.state == State.OBSTRUCTED:
+            self.set_speed(0.0)
+            self.check_for_lost_wall()
+            self.set_shortest_and_longest_range_in_front_of_robot()
+            self.check_for_collision()
+            if self.wall_to_hug == 'left':
+                self.set_rotation(-self.search_rotation_speed*2)
+            elif self.wall_to_hug == 'right':
+                self.set_rotation(self.search_rotation_speed*2)
+            if self.wall_lost == False and self.colliding == False:
                 self.state = State.DRIVING
                 
             
@@ -307,6 +329,8 @@ class TurtleExploration(Node):
         self.get_logger().info('wall lost %d' % self.wall_lost)
         self.get_logger().info('desired angle on wall %s' % self.desired_angle_on_wall)
         self.get_logger().info('angle on wall %s' % self.angle_on_wall)
+        self.get_logger().info('distance in front %f' % self.shortest_range_in_front_of_robot)
+
         # self.get_logger().info('shortest range in front of robot %f' % self.shortest_range_in_front_of_robot)
         # self.get_logger().info('longest range in front of robot %f' % self.longest_range_in_front_of_robot)
         # self.get_logger().info('longest defined range %f' % self.range_of_longest_dist)
