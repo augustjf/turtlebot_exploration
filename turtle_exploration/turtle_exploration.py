@@ -135,8 +135,6 @@ class TurtleExploration(Node):
           
     def check_for_lost_wall(self):
         offset_from_middle_of_robot = 30 #Checks for wall some angle in front of robot
-        ranges = []
-        #is_wall_lost = False
         buff = 0.1
         #define 3 angles to check
         if self.wall_to_hug == 'left':
