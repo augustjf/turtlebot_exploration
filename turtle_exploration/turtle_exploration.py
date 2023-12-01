@@ -46,8 +46,8 @@ class TurtleExploration(Node):
         self.desired_dist_from_wall = 0.65
         self.desired_angle_on_wall = 0 #angle on wall: -1 negative, 0 zero, 1 positive
         self.angle_on_wall = 0
-        self.search_speed = 0.3
-        self.search_rotation_speed = 0.45
+        self.search_speed = 0.2
+        self.search_rotation_speed = 0.2
         self.wall_lost = False
     
     
@@ -202,6 +202,7 @@ class TurtleExploration(Node):
             self.set_shortest_and_longest_range_in_front_of_robot()
             self.check_for_collision()
             self.collision_buffer = 0.4
+            self.set_speed(self.search_rotation_speed/2)
             if self.wall_to_hug == 'left':
                 self.set_rotation(self.search_rotation_speed) #Follow curvature of corner
             elif self.wall_to_hug == 'right':
@@ -231,7 +232,6 @@ class TurtleExploration(Node):
     def timer_callback(self):
         self.bug_algorithm_fsm()
         self.publisher.publish(self.total_vel)
-
         self.get_logger().info('state %d' % self.state)
         self.get_logger().info('distance from hugging wall %f' % self.dist_from_hugging_wall)
         self.get_logger().info('hugging wall %s' % self.wall_to_hug)
