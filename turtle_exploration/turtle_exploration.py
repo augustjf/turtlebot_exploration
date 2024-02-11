@@ -38,7 +38,7 @@ class TurtleExploration(Node):
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.start_time = time.time()
         self.time_elapsed = 0.0
-        self.timeout = 100
+        self.timeout = 50
 
         self.state = State.INIT
         self.radius_of_robot = 0.15 #roughly
@@ -57,8 +57,7 @@ class TurtleExploration(Node):
         self.search_speed = 0.2
         self.search_rotation_speed = 0.2
         self.wall_lost = False
-    
-    
+     
     def set_shortest_and_longest_range_in_front_of_robot(self): #Should be split up in more functions
         all_ranges = self.scan.ranges
         quarter_of_ranges = self.num_ranges//4
@@ -266,6 +265,7 @@ class TurtleExploration(Node):
     def timer_callback(self):
         self.bug_algorithm_fsm()
         self.publisher.publish(self.total_vel)
+
         # self.get_logger().info('state %d' % self.state)
         # self.get_logger().info('distance from hugging wall %f' % self.dist_from_hugging_wall)
         # self.get_logger().info('hugging wall %s' % self.wall_to_hug)
@@ -273,14 +273,17 @@ class TurtleExploration(Node):
         # self.get_logger().info('distance in front %f' % self.shortest_range_in_front_of_robot)
         # if self.colliding == True:
         #     self.get_logger().info('COLLIDING')
-        # self.time_elapsed = time.time() - self.start_time
-        # self.get_logger().info('time: %f' % self.time_elapsed)
-        # if self.time_elapsed > self.timeout:
-        #     self.set_speed(0.0)
-        #     self.set_rotation(0.0)
-        #     self.publisher.publish(self.total_vel)
-        #     self.get_pose()
-        #     raise SystemExit
+
+        self.time_elapsed = time.time() - self.start_time
+
+        
+        if self.time_elapsed > self.timeout:
+            self.get_logger().info('Time elapsed bro: %f' % self.time_elapsed)
+            self.set_speed(0.0)
+            self.set_rotation(0.0)
+            self.publisher.publish(self.total_vel)
+            self.get_pose()
+            raise SystemExit
 
 
 def main(args=None):
@@ -292,7 +295,7 @@ def main(args=None):
         rclpy.logging.get_logger("Quitting").info('Done')
     
     turtle_exploration.destroy_node()
-    rclpy.shutdown()
+    # rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
