@@ -1,16 +1,16 @@
 import math
 import rclpy
 import sys
+import time
+import os
 
 from rclpy.node import Node
-from tf2_ros.buffer import Buffer
-from tf2_ros import TransformException
-from tf2_ros.transform_listener import TransformListener
-from nav2_msgs.action import NavigateToPose
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
-from geometry_msgs.msg import TransformStamped
 from geometry_msgs.msg import Vector3
+from lifecycle_msgs.srv import GetState
+from tf2_ros.buffer import Buffer
+from tf2_ros.transform_listener import TransformListener
 
 class State():
     INIT = 0
@@ -31,6 +31,14 @@ class TurtleExploration(Node):
         self.speed = Vector3()
         self.rotation = Vector3()
         self.total_vel = Twist()
+
+        self.from_frame = 'map'
+        self.to_frame = 'base_footprint'
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.start_time = time.time()
+        self.time_elapsed = 0.0
+        self.timeout = 100
 
         self.state = State.INIT
         self.radius_of_robot = 0.15 #roughly
@@ -94,14 +102,12 @@ class TurtleExploration(Node):
         self.rotation.x = 0.0
         self.rotation.y = 0.0
         self.rotation.z = angular_vel
-        self.rotation_z = angular_vel
         self.total_vel.angular = self.rotation
 
     def set_speed(self, linear_vel):
         self.speed.x = linear_vel
         self.speed.y = 0.0
         self.speed.z = 0.0
-        self.speed_x = linear_vel
         self.total_vel.linear = self.speed
     
     def find_closest_wall(self):
@@ -131,8 +137,7 @@ class TurtleExploration(Node):
                 self.desired_angle_on_wall = 1
             elif self.dist_from_hugging_wall > self.desired_dist_from_wall+buffer:
                 self.desired_angle_on_wall = -1
-        
-          
+         
     def check_for_lost_wall(self):
         offset_from_middle_of_robot = 30 #Checks for wall some angle in front of robot
         buff = 0.1
@@ -146,8 +151,7 @@ class TurtleExploration(Node):
             self.wall_lost = True
         else:
             self.wall_lost = False
-   
-    
+      
     def set_angle_on_wall(self):
         offset_from_middle_of_robot = 10
         thresh_for_angle = 0.03
@@ -172,7 +176,6 @@ class TurtleExploration(Node):
                 self.angle_on_wall = -1
             else:
                 self.angle_on_wall = 0
-    
     
     def bug_algorithm_fsm(self):
         if self.state == State.INIT:
@@ -223,7 +226,38 @@ class TurtleExploration(Node):
             if self.colliding == False: #and self.wall_lost == False:
                 self.state = State.DRIVING
     
-        
+    def euler_from_quaternion(self, x, y, z, w):
+
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll = math.atan2(t0, t1)
+     
+        t2 = +2.0 * (w * y - z * x)
+        t2 = +1.0 if t2 > +1.0 else t2
+        t2 = -1.0 if t2 < -1.0 else t2
+        pitch = math.asin(t2)
+     
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw = math.atan2(t3, t4)
+     
+        return roll, pitch, yaw # in radians
+
+    def get_pose(self):
+        t = self.tf_buffer.lookup_transform(self.to_frame, self.from_frame, rclpy.time.Time())
+        quat_x = t.transform.rotation.x
+        quat_y = t.transform.rotation.y
+        quat_z = t.transform.rotation.z
+        quat_w = t.transform.rotation.w
+
+        _, _, yaw = self.euler_from_quaternion(quat_x, quat_y, quat_z, quat_w)
+        x_pos = t.transform.translation.x
+        y_pos = t.transform.translation.y
+
+        os.environ['ROBOT_FINAL_ANGLE'] = str(yaw)
+        os.environ['ROBOT_FINAL_X'] = str(x_pos)
+        os.environ['ROBOT_FINAL_Y'] = str(y_pos)
+
     def listener_callback(self, msg):
         self.scan = msg
         self.num_ranges = len(msg.ranges)
@@ -232,28 +266,33 @@ class TurtleExploration(Node):
     def timer_callback(self):
         self.bug_algorithm_fsm()
         self.publisher.publish(self.total_vel)
-        self.get_logger().info('state %d' % self.state)
-        self.get_logger().info('distance from hugging wall %f' % self.dist_from_hugging_wall)
-        self.get_logger().info('hugging wall %s' % self.wall_to_hug)
-        self.get_logger().info('wall lost %d' % self.wall_lost)
-        self.get_logger().info('distance in front %f' % self.shortest_range_in_front_of_robot)
-        if self.colliding == True:
-            self.get_logger().info('COLLIDING')
-        self.get_logger().info('\n')
+        # self.get_logger().info('state %d' % self.state)
+        # self.get_logger().info('distance from hugging wall %f' % self.dist_from_hugging_wall)
+        # self.get_logger().info('hugging wall %s' % self.wall_to_hug)
+        # self.get_logger().info('wall lost %d' % self.wall_lost)
+        # self.get_logger().info('distance in front %f' % self.shortest_range_in_front_of_robot)
+        # if self.colliding == True:
+        #     self.get_logger().info('COLLIDING')
+        # self.time_elapsed = time.time() - self.start_time
+        # self.get_logger().info('time: %f' % self.time_elapsed)
+        # if self.time_elapsed > self.timeout:
+        #     self.set_speed(0.0)
+        #     self.set_rotation(0.0)
+        #     self.publisher.publish(self.total_vel)
+        #     self.get_pose()
+        #     raise SystemExit
 
 
 def main(args=None):
-    
     rclpy.init(args=args)
-    
     try:
         turtle_exploration = TurtleExploration()
         rclpy.spin(turtle_exploration)
-    except BaseException:
-        print('Exception in route_manager:', file=sys.stderr)
-        raise
-    finally:
-        rclpy.shutdown()
+    except SystemExit:
+        rclpy.logging.get_logger("Quitting").info('Done')
+    
+    turtle_exploration.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
