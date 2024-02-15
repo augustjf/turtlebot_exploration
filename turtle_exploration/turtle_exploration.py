@@ -38,7 +38,7 @@ class TurtleExploration(Node):
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.start_time = time.time()
         self.time_elapsed = 0.0
-        self.timeout = 50
+        self.timeout = 300
 
         self.state = State.INIT
         self.radius_of_robot = 0.15 #roughly
@@ -266,14 +266,6 @@ class TurtleExploration(Node):
         self.bug_algorithm_fsm()
         self.publisher.publish(self.total_vel)
 
-        # self.get_logger().info('state %d' % self.state)
-        # self.get_logger().info('distance from hugging wall %f' % self.dist_from_hugging_wall)
-        # self.get_logger().info('hugging wall %s' % self.wall_to_hug)
-        # self.get_logger().info('wall lost %d' % self.wall_lost)
-        # self.get_logger().info('distance in front %f' % self.shortest_range_in_front_of_robot)
-        # if self.colliding == True:
-        #     self.get_logger().info('COLLIDING')
-
         self.time_elapsed = time.time() - self.start_time
 
         
@@ -295,7 +287,6 @@ def main(args=None):
         rclpy.logging.get_logger("Quitting").info('Done')
     
     turtle_exploration.destroy_node()
-    # rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
