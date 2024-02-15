@@ -32,13 +32,9 @@ class TurtleExploration(Node):
         self.rotation = Vector3()
         self.total_vel = Twist()
 
-        self.from_frame = 'map'
-        self.to_frame = 'base_footprint'
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
         self.start_time = time.time()
         self.time_elapsed = 0.0
-        self.timeout = 300
+        self.timeout = 50
 
         self.state = State.INIT
         self.radius_of_robot = 0.15 #roughly
@@ -206,7 +202,7 @@ class TurtleExploration(Node):
             self.collision_buffer = 0.4
             self.set_speed(self.search_rotation_speed/2)
             if self.wall_to_hug == 'left':
-                self.set_rotation(self.search_rotation_speed) #Follow curvature of corner
+                self.set_rotation(self.search_rotation_speed)
             elif self.wall_to_hug == 'right':
                 self.set_rotation(-self.search_rotation_speed)
             if self.wall_lost == False:
@@ -224,39 +220,8 @@ class TurtleExploration(Node):
                 self.set_rotation(self.search_rotation_speed)
             if self.colliding == False: #and self.wall_lost == False:
                 self.state = State.DRIVING
-    
-    def euler_from_quaternion(self, x, y, z, w):
 
-        t0 = +2.0 * (w * x + y * z)
-        t1 = +1.0 - 2.0 * (x * x + y * y)
-        roll = math.atan2(t0, t1)
-     
-        t2 = +2.0 * (w * y - z * x)
-        t2 = +1.0 if t2 > +1.0 else t2
-        t2 = -1.0 if t2 < -1.0 else t2
-        pitch = math.asin(t2)
-     
-        t3 = +2.0 * (w * z + x * y)
-        t4 = +1.0 - 2.0 * (y * y + z * z)
-        yaw = math.atan2(t3, t4)
-     
-        return roll, pitch, yaw # in radians
-
-    def get_pose(self):
-        t = self.tf_buffer.lookup_transform(self.to_frame, self.from_frame, rclpy.time.Time())
-        quat_x = t.transform.rotation.x
-        quat_y = t.transform.rotation.y
-        quat_z = t.transform.rotation.z
-        quat_w = t.transform.rotation.w
-
-        _, _, yaw = self.euler_from_quaternion(quat_x, quat_y, quat_z, quat_w)
-        x_pos = t.transform.translation.x
-        y_pos = t.transform.translation.y
-
-        os.environ['ROBOT_FINAL_ANGLE'] = str(yaw)
-        os.environ['ROBOT_FINAL_X'] = str(x_pos)
-        os.environ['ROBOT_FINAL_Y'] = str(y_pos)
-
+  
     def listener_callback(self, msg):
         self.scan = msg
         self.num_ranges = len(msg.ranges)
